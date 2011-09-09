@@ -1,110 +1,79 @@
-
-;; # Simple configuration framework
-
 (ns confjure.core
-  "Library to let the server developer manage their configuration data.
+  "A simple library to config an application")
 
-   There are several basic ideas here:
-     * env-mode: The environment of the program to run. Built-in ::test
-                 and ::production mode, and the default is ::test mode.
-     * conf-map: Given an env-mode, there is just one effictive conf-map,
-                 which is a map of conf-value
-     * conf-value: k => v pair, where k must always be a keywork,
-                   and the value can be any type.  
-     * conf-elements: Configurable elements of program, work as a dictionary.
-                      All configure values must just a instance of an element.
-                      When you specify a conf-element, you must provide a
-                      check function, the library will use it to check if a
-                      conf-value is legal.")
+;; -------------------------------------------------------
+;; ## Immutable part
+(defn- add-dict-item
+  [conf-dict k validator]
+  (assoc conf-dict k validator))
 
-;;--------------------------------------------------------------
-;; # Immutable part
+(defn- add-conf-value
+  [conf-values new-conf]
+  (merge conf-values new-conf))
 
-(defn value-legal?
-  "check in a conf-map if value v is a legal config element of k.
-   Three return value possible: :legal, :illegal or nil (not found)"
-  [conf-map k v]
-  {:pre [(map? conf-map) (keyword? k)]}
-  (when-let [elem (get conf-map k)]
-    (when-let [pred (:pred elem)]
-      (if (pred v) :legal :illegal))))
+(defn- conf-errors
+  [conf-dict conf-values]
+  (seq (for [[key validator] conf-dict
+             :let [val (get conf-values key)]
+             :when (and validator (not (validator val)))]
+         [key val])))
 
-(defn legality
-  "Check if a val conform a pred.
-   Three return value possible: :legal, :illegal or nil (val or pred is nil)"
-  [val pred]
-  (when (and (not (nil? val)) pred)
-    (if (pred val) :legal :illegal)))
+;;---------------------------------------------------------
+;; ## Some in-memory store: 
+;; * The config dictionary.
+;;   The library will check the dictionary to make sure everything's
+;;   configured properly.
+(defonce ^:private the-dict (atom {}))
 
-(defn check-values
-  "Check if config values conform predefined conf-elements.
-   Returns a map: conf-name => checking result."
-  [conf-values conf-elements]
-  {:pre [(map? conf-values) (map? conf-elements)]}
-  (into {}
-        (for [[conf-name {pred :pred}] conf-elements
-              :let [val (conf-values conf-name)]]
-          [conf-name (legality val pred)])))
+;; * The config value store.
+(defonce ^:private the-values (atom {}))
 
-(defn mk-error-message
-  "Construct a error message for given conf-key and it's checking
-   rslt (return by legality check) and the document of the conf-key."
-  [rslt conf-key document]
-  {:pre [(keyword? conf-key)]}
-  (let [rslt (or rslt :nonexist)]
-    (str (name rslt) " " (name conf-key) ": " document)))
+;; * Flag to cache checked
+(defonce ^:private checked (atom false))
 
-(defn translate-results
-  "translate the rslts of checking into error messages against
-   config elements"
-  [conf-elements rslts]
-  {:pre [(map? rslts) (map? conf-elements)]}
-  (for [[conf-name rslt] rslts
-        :when (not= rslt :legal)
-        :let [document (-> conf-elements conf-name :doc)
-              msg (mk-error-message rslt conf-name document)]]
-    msg))
+;; Whenever the dict on values changed, we need to check
+;; all the values again.
+(doseq [obj [the-dict the-values]]
+  (add-watch obj :fresh
+             (fn [_ _ _ _] (swap! checked (fn [_] false)))))
 
-(defn provide-value
-  "Provide a configuration value of env to conf-values,
-   giving current conf-elements, with config name k, and value v,
-   returns updated conf-values or nil if k, v not conform conf-elements"
-  [conf-values conf-elements env k v]
-  {:pre [(map? conf-elements) (map? conf-values) (keyword? env) (keyword? k)]}
-  (when (value-legal? conf-elements k v)
-    (update-in conf-values [env] assoc k v)))
+;;----------------------------------------------------------
+;; ## Interface functions
+(defn introduce!
+  "Introduce a new config into the dictionary.
+   You may optional provide a validator to check if a value
+   is validate for this config."
+  ([k]
+     (introduce! k nil))
+  ([k validator]
+   {:pre [(keyword? k)]}
+     (swap! the-dict add-dict-item k validator)))
 
-;; TODO mutable part to provide a central storage of all
-;; configurations
+(defn provide!
+  "Provide a config value v for config k, given in a config
+   environment env. e.g. :test/:production.
+   The application will check the system property config.env,
+   only when env matches this property will be effective."
+  [env conf-map]
+  {:pre [(keyword? env) (map? conf-map)]}
+  (let [run-env (or (System/getProperty "config.env") "test")]
+    (when (= run-env (name env))
+      (swap! the-values add-conf-value conf-map))))
 
-(comment
-  ;; When you want to introduce a new configuable element for your
-  ;; program:
-  (def-config :myconf
-    "My sample config, must be one of :bar :baz"
-    (fn [elem] (#{:foo :bar :baz} elem)))
-  
-  ;; You can provide values to config elements just for testing
-  (provide-config [:c/test] {:myconf :foo})
+;; I think better to check the config implicitly when the
+;; user try to load first config element.
+(defn check-all
+  "Check the config dictionary if all the config elements
+   are set properly."
+  []
+  (when (not @checked)
+    (swap! checked not)
+    (when-let [errs (conf-errors @the-dict @the-values)]
+      (throw (RuntimeException. (str errs))))))
 
-  ;; You can provide different values for production
-  (provide-config [:c/production] {:myconf :baz})
-
-  ;; To specify which running environment the program is in,
-  ;; you may add "-Drunning.environment=production" to your command
-  ;; line, the default running environment is test
-
-  ;; To check if all config elements have been provided a legal value,
-  ;; use this when you start your program (e.g. in main)
-  (check-config)
-  ;; if some of the elements do not have meaningful value,
-  ;; check-config will raise a error.
-  ;; If succeed, it will go on, and output all effective config value
-  ;; into a file, you can check the file.
-
-  ;; To return a config value
-  (load-config :myconf)
-
-  ;; To change a config value in runtime
-  (alter-config! :myconf :baz)
-  )
+(defn value
+  "Read a config value of k"
+  [k]
+  {:pre [(keyword? k)]}
+  (check-all)
+  (get @the-values k))
