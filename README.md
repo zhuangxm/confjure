@@ -1,3 +1,10 @@
+## Health
+
+[![Continuous Integration status](https://secure.travis-ci.org/robertluo/confjure.png)](http://travis-ci.org/rebertluo/confjure)
+
+
+CI is hosted by [travis-ci.org](http://travis-ci.org)
+
 ## Motivate
 
 While developing server application, how to config different things is
@@ -49,13 +56,13 @@ While for production, you may provide a config file to collect all:
         :baz #(str "Hello, " %)})
 
 You can safely require this production-conf in your bootstrap file,
-because it will not affect anything unless you set the system property
+ because it will not affect anything unless you set the system property
 config.env to "production".
 
 ## Features
 
-### automatical check
+### Automatically check
 
 The library will check all the configurable elements when the first
-invocation of value. If any provided value not conform the
+invocation of value. If any provided value does not conform the
 corresponding validator, it will throw a RuntimeException.
