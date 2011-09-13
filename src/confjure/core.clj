@@ -72,8 +72,11 @@
       (throw (RuntimeException. (str errs))))))
 
 (defn value
-  "Read a config value of k"
+  "Read a config value of k.
+   If k does not exist in dictionary, it will throw an exception."
   [k]
   {:pre [(keyword? k)]}
   (check-all)
-  (get @the-values k))
+  (if (contains? @the-dict k)
+    (get @the-values k)
+    (throw (RuntimeException. (str k " does not exist in dictionary")))))
