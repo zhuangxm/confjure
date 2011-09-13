@@ -5,7 +5,10 @@
 ;; ## Immutable part
 (defn- add-dict-item
   [conf-dict k validator]
-  (assoc conf-dict k validator))
+  (if (contains? conf-dict k)
+    (throw (RuntimeException.
+            (str k " has been introduced to the dictionary.")))
+    (assoc conf-dict k validator)))
 
 (defn- add-conf-value
   [conf-values new-conf]

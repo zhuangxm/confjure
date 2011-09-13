@@ -2,6 +2,11 @@
   (:use [clojure.test]
         [confjure.core :reload-all true]))
 
+(deftest test-add-dict-item
+  (let [add-dict-item @#'confjure.core/add-dict-item]
+    (is (thrown? RuntimeException (add-dict-item {:foo even?} :foo odd?)))
+    (is (= (add-dict-item {:foo even?} :bar nil?) {:foo even? :bar nil?}))))
+
 (deftest test-conf-errors
   (let [conf-errors @#'confjure.core/conf-errors
         dict {:foo even? :bar fn? :baz nil}]
