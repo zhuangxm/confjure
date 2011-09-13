@@ -13,10 +13,14 @@
 
 (defn- conf-errors
   [conf-dict conf-values]
-  (seq (for [[key validator] conf-dict
-             :let [val (get conf-values key)]
-             :when (and validator (not (validator val)))]
-         [key val])))
+  (let [value-errors (for [[k validator] conf-dict
+                           :let [val (get conf-values k)]
+                           :when (and validator (not (validator val)))]
+                       [k val])
+        orphan-values (for [[k val] conf-values
+                            :when (not (contains? conf-dict k))]
+                        [k :orphan-value])]
+    (seq (concat value-errors orphan-values))))
 
 ;;---------------------------------------------------------
 ;; ## Some in-memory store: 
