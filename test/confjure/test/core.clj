@@ -4,7 +4,9 @@
 
 (deftest test-add-dict-item
   (let [add-dict-item @#'confjure.core/add-dict-item]
-    (is (thrown? RuntimeException (add-dict-item {:foo even?} :foo odd?)))
+    (is (thrown? RuntimeException (add-dict-item {:foo even?}
+                                                 :foo odd? :strict true)))
+    (is (= {:foo odd?} (add-dict-item {:foo even?} :foo odd? :strict false)))
     (is (= (add-dict-item {:foo even?} :bar nil?) {:foo even? :bar nil?}))))
 
 (deftest test-conf-errors

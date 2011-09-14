@@ -4,8 +4,10 @@
 ;; -------------------------------------------------------
 ;; ## Immutable part
 (defn- add-dict-item
-  [conf-dict k validator]
-  (if (contains? conf-dict k)
+  "Add new config element k with validator to conf-dict,
+   option :strict with true, k can not be redefined"
+  [conf-dict k validator & {:keys [strict] :or {strict false}}]
+  (if (and strict (contains? conf-dict k))
     (throw (RuntimeException.
             (str k " has been introduced to the dictionary.")))
     (assoc conf-dict k validator)))
@@ -44,6 +46,9 @@
   (add-watch obj :fresh
              (fn [_ _ _ _] (swap! checked (fn [_] false)))))
 
+(defn- env-mode
+  []
+  (keyword (or (System/getProperty "config.env") "test")))
 ;;----------------------------------------------------------
 ;; ## Interface functions
 (defn introduce!
@@ -54,7 +59,8 @@
      (introduce! k nil))
   ([k validator]
    {:pre [(keyword? k)]}
-     (swap! the-dict add-dict-item k validator)))
+   (swap! the-dict add-dict-item k validator
+          :strict (not= :test (env-mode)))))
 
 (defn provide!
   "Provide a config value v for config k, given in a config
@@ -63,9 +69,8 @@
    only when env matches this property will be effective."
   [env conf-map]
   {:pre [(keyword? env) (map? conf-map)]}
-  (let [run-env (or (System/getProperty "config.env") "test")]
-    (when (= run-env (name env))
-      (swap! the-values add-conf-value conf-map))))
+  (when (= (env-mode) env)
+    (swap! the-values add-conf-value conf-map)))
 
 ;; I think better to check the config implicitly when the
 ;; user try to load first config element.
